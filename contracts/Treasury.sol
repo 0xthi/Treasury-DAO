@@ -3,41 +3,62 @@ pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./interfaces/IIntents.sol";
+import "./permit2/interfaces/IPermit2.sol"; // Ensure this path is correct
 
 contract Treasury {
-    using SafeERC20 for IERC20; // Use SafeERC20 for safe token transfers
+    using SafeERC20 for IERC20;
 
-    IERC20 public immutable token; // Mark as immutable to reduce gas on read
+    IERC20 public immutable token;
+    address public intentsContract;
+    IPermit2 public permit2; // Permit2 interface
 
-    // Custom Errors
     error NotAuthorized();
     error AmountMustBeGreaterThanZero();
-    error InsufficientFunds(uint256 available);
     error InvalidTokenReceived();
-    
-    // Events
+
     event Deposited(address indexed from, uint256 amount);
 
     constructor(address _token) {
         token = IERC20(_token);
     }
 
+    function initialize(address _intentsContract, address _permit2) external {
+        intentsContract = _intentsContract;
+        permit2 = IPermit2(_permit2); // Initialize Permit2
+    }
+
+    modifier onlyIntents() {
+        if (msg.sender != intentsContract) revert NotAuthorized();
+        _;
+    }
+
     function deposit(uint256 _amount) external {
-        if (_amount == 0) revert AmountMustBeGreaterThanZero(); // Using == to save gas
+        if (_amount == 0) revert AmountMustBeGreaterThanZero();
         token.safeTransferFrom(msg.sender, address(this), _amount);
         emit Deposited(msg.sender, _amount);
     }
 
-    function transfer(address to, uint256 amount) external {
-        token.safeTransfer(to, amount); // Use SafeERC20's safeTransfer
+    function depositWithPermit(
+        IPermit2.PermitTransferFrom memory permit,
+        IPermit2.SignatureTransferDetails calldata transferDetails,
+        address owner,
+        bytes calldata signature
+    ) external {
+        // Use Permit2 to perform the transfer
+        permit2.permitTransferFrom(permit, transferDetails, owner, signature);
+
+        // Handle the deposit logic after the permit transfer
+        emit Deposited(owner, transferDetails.requestedAmount);
     }
 
-    receive() external payable {
-        // Reject any Ether sent to the contract
-        revert InvalidTokenReceived(); // Always revert with this custom error
+    function transfer(address to, uint256 amount) external onlyIntents {
+        token.safeTransfer(to, amount);
     }
+
+    receive() external payable {}
 
     function getBalance() external view returns (uint256) {
-        return token.balanceOf(address(this)); // Minimal gas impact, no optimization needed here
-    }    
+        return token.balanceOf(address(this));
+    }
 }

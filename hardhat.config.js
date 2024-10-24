@@ -10,17 +10,23 @@ const config = {
     // test networks
     hardhat: {
       chainId: 31337,
-      gas: 12000000,
-      blockGasLimit: 0x1fffffffffffff,
       allowUnlimitedContractSize: true,
     },
     bsctest: {
       url: process.env.RPC_URL,
-      accounts: [process.env.TESTNET_PRIVATE_KEY || ''],
+      accounts: [
+        process.env.PRIVATE_KEY_1 || '',
+        process.env.PRIVATE_KEY_2 || '',
+        process.env.PRIVATE_KEY_3 || ''
+      ],
     },
     sepolia: {
       url: process.env.RPC_URL,
-      accounts: [process.env.TESTNET_PRIVATE_KEY || ''],
+      accounts: [
+        process.env.PRIVATE_KEY_1 || '',
+        process.env.PRIVATE_KEY_2 || '',
+        process.env.PRIVATE_KEY_3 || ''
+      ],
     },
   },
   etherscan: {
@@ -37,6 +43,7 @@ const config = {
             enabled: true,
             runs: 200,
           },
+          viaIR: true, // Add viaIR option here
         },
       },
     ],
