@@ -6,16 +6,9 @@ async function main() {
     // Get the signers
     const [owner1, owner2, owner3] = await ethers.getSigners(); // Get three owners
 
-    // Deploy Permit2 contract (if needed)
-    const Permit2 = await ethers.getContractFactory("Permit2"); // Replace with actual Permit2 contract name
-    const permit2 = await Permit2.deploy();
-    await permit2.waitForDeployment();
-    const permit2Address = await permit2.getAddress();
-    console.log("Permit2 deployed to:", permit2Address);
-
     // Deploy USDC contract
     const USDC = await ethers.getContractFactory("USDC");
-    const usdc = await USDC.deploy(); // Pass the permit2 address
+    const usdc = await USDC.deploy();
     await usdc.waitForDeployment();
     const usdcAddress = await usdc.getAddress();
     console.log("USDC deployed to:", usdcAddress);
@@ -36,18 +29,17 @@ async function main() {
 
     // Deploy Intents contract with Treasury and MultiSig addresses
     const Intents = await ethers.getContractFactory("Intents");
-    const intents = await Intents.deploy(treasuryAddress, permit2Address, [owner1.getAddress(), owner2.getAddress(), owner3.getAddress()], 2, 1000000000); // 1000000000 represents 1000 USDC
+    const intents = await Intents.deploy(treasuryAddress, usdcAddress, [owner1.getAddress(), owner2.getAddress(), owner3.getAddress()], 2, 1000000000); // 1000000000 represents 1000 USDC
     await intents.waitForDeployment();
     const intentsAddress = await intents.getAddress();
     console.log("Intents deployed to:", intentsAddress);
 
-    // Initialize the Treasury contract with the intents contract address and permit2 address
-    await treasury.initialize(intentsAddress, permit2Address);
-    console.log("Treasury initialized with intents and permit2 addresses.");
+    // Initialize the Treasury contract with the intents contract address 
+    await treasury.initialize(intentsAddress);
+    console.log("Treasury initialized with intent address.");
 
     // Write the addresses to a JSON file
     const addresses = {
-        Permit2: permit2Address,
         USDC: usdcAddress,
         MultiSig: multiSigAddress,
         Treasury: treasuryAddress,
