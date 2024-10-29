@@ -2,30 +2,34 @@
 pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IIntents.sol";
-import "./permit2/interfaces/IPermit2.sol"; // Ensure this path is correct
+import "./permit2/interfaces/IPermit2.sol"; // Import the Permit2 interface
+import "./permit2/interfaces/ISignatureTransfer.sol"; // Import the ISignatureTransfer interface
 
 contract Treasury {
-    using SafeERC20 for IERC20;
-
     IERC20 public immutable token;
+    IPermit2 public immutable permit2; // Reference to the Permit2 contract
     address public intentsContract;
-    IPermit2 public permit2; // Permit2 interface
+    bool private initialized; // Track if the contract has been initialized
+    bool private _reentrancyGuard; // Reentrancy guard
 
     error NotAuthorized();
     error AmountMustBeGreaterThanZero();
     error InvalidTokenReceived();
+    error AlreadyInitialized(); // New error for re-initialization
 
     event Deposited(address indexed from, uint256 amount);
 
-    constructor(address _token) {
+    // Constructor to initialize immutable variables
+    constructor(address _token, address _permit2) {
         token = IERC20(_token);
+        permit2 = IPermit2(_permit2);
     }
 
-    function initialize(address _intentsContract, address _permit2) external {
-        intentsContract = _intentsContract;
-        permit2 = IPermit2(_permit2); // Initialize Permit2
+    function initialize(address _intents) external {
+        if (initialized) revert AlreadyInitialized(); // Prevent re-initialization
+        intentsContract = _intents; // Initialize intentsContract to a default value
+        initialized = true; // Mark as initialized
     }
 
     modifier onlyIntents() {
@@ -33,27 +37,33 @@ contract Treasury {
         _;
     }
 
-    function deposit(uint256 _amount) external {
-        if (_amount == 0) revert AmountMustBeGreaterThanZero();
-        token.safeTransferFrom(msg.sender, address(this), _amount);
-        emit Deposited(msg.sender, _amount);
+    modifier nonReentrant() {
+        require(!_reentrancyGuard, "no reentrancy");
+        _reentrancyGuard = true;
+        _;
+        _reentrancyGuard = false;
     }
 
-    function depositWithPermit(
-        IPermit2.PermitTransferFrom memory permit,
-        IPermit2.SignatureTransferDetails calldata transferDetails,
-        address owner,
+    // Updated deposit function to accept permit and signature
+    function deposit(
+        uint256 _amount,
+        IPermit2.PermitTransferFrom calldata permit, // Use PermitTransferFrom from IPermit2
         bytes calldata signature
-    ) external {
-        // Use Permit2 to perform the transfer
-        permit2.permitTransferFrom(permit, transferDetails, owner, signature);
+    ) external nonReentrant {
+        if (_amount == 0) revert AmountMustBeGreaterThanZero();
 
-        // Handle the deposit logic after the permit transfer
-        emit Deposited(owner, transferDetails.requestedAmount);
-    }
+        // Verify the permit signature and transfer tokens using Permit2
+        permit2.permitTransferFrom(
+            permit,
+            ISignatureTransfer.SignatureTransferDetails({ // Reference SignatureTransferDetails from ISignatureTransfer
+                to: address(this),
+                requestedAmount: _amount
+            }),
+            msg.sender,
+            signature
+        );
 
-    function transfer(address to, uint256 amount) external onlyIntents {
-        token.safeTransfer(to, amount);
+        emit Deposited(msg.sender, _amount); // Emit event with msg.sender
     }
 
     receive() external payable {}

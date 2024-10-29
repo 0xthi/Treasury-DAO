@@ -7,16 +7,19 @@ contract MultiSig {
     mapping(address => bool) public isOwnerMapping;
     mapping(address => uint256) public ownerIndex;
     uint256 public requiredSignatures;
+    uint256 public threshold;
 
     error NotOwner();
     error NotCustodian();
     error InsufficientOwners(uint256 required);
     error AlreadyAnOwner();
     error NotAnOwner();
+    error ThresholdMustBeGreaterThanZero();
 
     event OwnerAdded(address indexed newOwner);
     event OwnerRemoved(address indexed removedOwner);
     event RequiredSignaturesChanged(uint256 newRequiredSignatures);
+    event ThresholdChanged(uint256 newThreshold);
 
     modifier onlyOwner() {
         if (!isOwnerMapping[msg.sender]) revert NotOwner();
@@ -28,11 +31,13 @@ contract MultiSig {
         _;
     }
 
-    constructor(address[] memory _owners, uint256 _requiredSignatures) {
+    constructor(address[] memory _owners, uint256 _requiredSignatures, uint256 _threshold) {
         if (_owners.length < _requiredSignatures) revert InsufficientOwners(_requiredSignatures);
+        if (_threshold == 0) revert ThresholdMustBeGreaterThanZero();
         
         owners = _owners;
         requiredSignatures = _requiredSignatures;
+        threshold = _threshold;
         custodian = msg.sender;
 
         unchecked {

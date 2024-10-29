@@ -1,64 +1,51 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import "./interfaces/ITreasury.sol";
-import "./MultiSig.sol"; // Import the actual MultiSig contract
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol"; // Import ECDSA
-import "./permit2/interfaces/IPermit2.sol"; // Import the Permit2 interface
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import "./MultiSig.sol"; // Import the MultiSig contract
 
-contract Intents is MultiSig {
+contract Intents is MultiSig, EIP712 {
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32; // Use OpenZeppelin's ECDSA library
+
+    // Custom errors
+    error ExecutionTimeNotReached();
+    error NotEnoughSignatures();
+    error InvalidSignature();
+    error AmountMustBeGreaterThanZero();
+    error RecurringIntervalMustBeGreaterThanZero();
+    error InsufficientSignaturesForAmount();
 
     struct Intent {
-        address user;
-        address to;
-        uint128 amount;
+        address user; // User who created the intent
+        address to;   // Recipient address
+        uint128 amount; // Amount to transfer
         uint32 nextExecutionTime; // When the next payment should occur
         uint32 recurringInterval; // Interval for recurring payments
         uint16 executionCount; // Count of how many times the intent has been executed
     }
 
-    ITreasury public treasury;
-    IPermit2 public permit2; // Permit2 interface
-    uint256 public nextIntentId;
-    uint256 public immutable threshold;
-
     mapping(uint256 => Intent) public intents;
-
-    error ExecutionTimeNotReached();
-    error ExecutionTimeInvalid();
-    error NotEnoughSignatures();
-    error AmountMustBeGreaterThanZero();
-    error IntentNotFound();
+    uint256 public nextIntentId;
 
     event IntentCreated(uint256 indexed intentId, address indexed user, address indexed to, uint128 amount, uint32 nextExecutionTime, uint32 recurringInterval);
     event IntentExecuted(uint256 indexed intentId, address indexed to, uint128 amount, uint256 executionCount);
-    event IntentCancelled(uint256 indexed intentId);
 
-    constructor(
-        address _treasury,
-        address _permit2,
-        address[] memory _owners,
-        uint256 _requiredSignatures,
-        uint256 _threshold
-    )
-        MultiSig(_owners, _requiredSignatures)
-    {
-        treasury = ITreasury(_treasury);
-        permit2 = IPermit2(_permit2); // Initialize Permit2
-        threshold = _threshold;
-        nextIntentId = 0;
-    }
+    // Define the EIP712 domain name and version
+    string private constant DOMAIN_NAME = "IntentsContract";
+    string private constant DOMAIN_VERSION = "1";
 
-    function createIntent(address _to, uint128 _amount, uint32 _recurringInterval) external {
-        if (_amount == 0) revert AmountMustBeGreaterThanZero();
-        if (_recurringInterval == 0) revert ExecutionTimeInvalid(); // Ensure the interval is not zero
+    constructor(address[] memory _owners, uint256 _requiredSignatures, uint256 _threshold) 
+        MultiSig(_owners, _requiredSignatures, _threshold) // Pass the threshold
+        EIP712(DOMAIN_NAME, DOMAIN_VERSION) {}
 
-        uint256 intentId = nextIntentId;
-        nextIntentId++;
+    function createIntent(address _to, uint128 _amount, uint32 _recurringInterval) external onlyOwner {
+        if (_amount <= 0) revert AmountMustBeGreaterThanZero();
+        if (_recurringInterval <= 0) revert RecurringIntervalMustBeGreaterThanZero();
 
-        // Calculate nextExecutionTime based on the current block timestamp and the recurring interval
+        uint256 intentId = nextIntentId++;
         uint32 nextExecutionTime = uint32(block.timestamp) + _recurringInterval;
 
         intents[intentId] = Intent({
@@ -75,40 +62,30 @@ contract Intents is MultiSig {
 
     function executeApprovedIntent(
         uint256 _intentId,
-        IPermit2.PermitTransferFrom memory permit,
-        IPermit2.SignatureTransferDetails calldata transferDetails,
         bytes[] calldata _signatures // Collect signatures from owners
     ) external {
         Intent storage intent = intents[_intentId];
-        if (intent.nextExecutionTime > uint32(block.timestamp)) revert ExecutionTimeNotReached();
+        if (intent.nextExecutionTime > block.timestamp) revert ExecutionTimeNotReached();
 
-        // Check if the required number of signatures have been collected
-        uint256 signatureCount = 0;
+        // Determine required signatures based on the amount
+        uint256 required = intent.amount > threshold ? requiredSignatures : 1;
+
+        // Verify signatures
+        if (_signatures.length < required) revert NotEnoughSignatures();
+
+        // Check if the signatures are valid
+        uint256 validSignatures = 0;
         for (uint256 i = 0; i < _signatures.length; i++) {
-            bytes memory signature = _signatures[i];
-
-            // Verify the signature
-            bytes32 messageHash = keccak256(abi.encodePacked(_intentId, intent.to, intent.amount));
-            bytes32 ethSignedMessageHash = toEthSignedMessageHash(messageHash); // Use the custom function
-            address recoveredAddress = recoverSigner(ethSignedMessageHash, signature);
-            
-            if (isOwnerMapping[recoveredAddress]) {
-                signatureCount++;
+            address signer = recoverSigner(intent.to, intent.amount, _signatures[i]);
+            if (isOwnerMapping[signer]) {
+                validSignatures++;
             }
         }
 
-        // Determine required signatures based on the amount
-        if (intent.amount > threshold) {
-            if (signatureCount < requiredSignatures) revert NotEnoughSignatures();
-        } else {
-            if (signatureCount < 1) revert NotEnoughSignatures(); // At least one signature is required
-        }
-
-        // Use Permit2 to verify the permit
-        permit2.permitTransferFrom(permit, transferDetails, msg.sender, _signatures[0]); // Assuming the first signature is used for Permit2
+        if (validSignatures < required) revert InsufficientSignaturesForAmount();
 
         // Transfer the amount to the intended recipient
-        treasury.transfer(intent.to, intent.amount);
+        IERC20(address(this)).safeTransfer(intent.to, intent.amount);
 
         // Increment the execution count
         intent.executionCount++;
@@ -119,19 +96,16 @@ contract Intents is MultiSig {
         intent.nextExecutionTime += intent.recurringInterval; // Set the next execution time
     }
 
-    function cancelIntent(uint256 _intentId) external onlyOwner {
-        delete intents[_intentId]; // Remove the intent
-
-        emit IntentCancelled(_intentId);
-    }
-
-    // Helper function to recover the signer from a message hash and signature
-    function recoverSigner(bytes32 messageHash, bytes memory signature) internal pure returns (address) {
-        return ECDSA.recover(messageHash, signature);
-    }
-
-    // Custom function to convert a message hash to an Ethereum signed message hash
-    function toEthSignedMessageHash(bytes32 hash) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+    function recoverSigner(address to, uint128 amount, bytes memory signature) internal view returns (address) {
+        // Create the message hash using EIP712
+        bytes32 structHash = keccak256(abi.encode(
+            keccak256("Intent(address to,uint128 amount)"),
+            to,
+            amount
+        ));
+        bytes32 digest = _hashTypedDataV4(structHash); // Use EIP712 to hash the typed data
+        address signer = digest.recover(signature); // Recover the signer from the signature
+        if (signer == address(0)) revert InvalidSignature();
+        return signer;
     }
 }

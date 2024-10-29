@@ -4,24 +4,28 @@ require("@nomicfoundation/hardhat-toolbox");
 const { config: dotEnvConfig } = require("dotenv");
 dotEnvConfig();
 
-const config = {
+module.exports = {
   defaultNetwork: 'hardhat',
   networks: {
-    // test networks
     hardhat: {
-      chainId: 31337,
-      allowUnlimitedContractSize: true,
+      chainId: 31337, // Default Hardhat chain ID
     },
-    bsctest: {
-      url: process.env.RPC_URL,
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337, // Ensure this matches the Hardhat default
+    },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC_URL, // Replace with your Infura project ID
+      chainId: 11155111, // Sepolia chain ID
       accounts: [
         process.env.PRIVATE_KEY_1 || '',
         process.env.PRIVATE_KEY_2 || '',
         process.env.PRIVATE_KEY_3 || ''
       ],
     },
-    sepolia: {
-      url: process.env.RPC_URL,
+    bsctest: {
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545/", // BSC Testnet RPC URL
+      chainId: 97, // BSC Testnet chain ID
       accounts: [
         process.env.PRIVATE_KEY_1 || '',
         process.env.PRIVATE_KEY_2 || '',
@@ -32,6 +36,7 @@ const config = {
   etherscan: {
     apiKey: {
       sepolia: process.env.ETHERSCAN_API_KEY || '',
+      bscTestnet: process.env.BSCSCAN_API_KEY || '',
     },
   },
   solidity: {
@@ -43,7 +48,7 @@ const config = {
             enabled: true,
             runs: 200,
           },
-          viaIR: true, // Add viaIR option here
+          viaIR: true,
         },
       },
     ],
@@ -82,5 +87,3 @@ const config = {
   //   timeout: 100000,
   // },
 };
-
-module.exports = config;

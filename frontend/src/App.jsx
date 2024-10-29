@@ -1,6 +1,6 @@
 import { createAppKit } from '@reown/appkit/react'
 import { Ethers5Adapter } from '@reown/appkit-adapter-ethers5'
-import { mainnet, arbitrum, sepolia } from '@reown/appkit/networks'
+import { mainnet, arbitrum, sepolia, bscTestnet } from '@reown/appkit/networks'
 
 // 1. Get projectId
 const projectId = 'YOUR_PROJECT_ID'
@@ -13,11 +13,11 @@ const metadata = {
   icons: ['https://avatars.mywebsite.com/']
 }
 
-// 3. Create the AppKit instance
+// 4. Create the AppKit instance
 createAppKit({
   adapters: [new Ethers5Adapter()],
   metadata: metadata,
-  networks: [mainnet, arbitrum, sepolia],
+  networks: [ mainnet, arbitrum, sepolia, bscTestnet], // Include localhost in the networks array
   projectId,
   features: {
     analytics: true // Optional - defaults to your Cloud configuration
