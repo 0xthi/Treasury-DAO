@@ -8,6 +8,7 @@ async function main() {
     // Deploy USDC contract
     const USDC = await ethers.getContractFactory("USDC");
     const usdc = await USDC.deploy();
+    const usdc = await USDC.deploy();
     await usdc.waitForDeployment();
     const usdcAddress = await usdc.getAddress();
     console.log("USDC deployed to:", usdcAddress);
