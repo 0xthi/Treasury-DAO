@@ -1,13 +1,17 @@
-# Sample Hardhat Project
+# TREASURY DAO
+Multisig treasury with uniswap/permit2 integrated and signature based owner signing. Anybody can create intents. If owner signs and approves the intent, it will be added to chainlink keeper which executes the intents on the mentioned recurring interval
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
+## Steps to clone and run frontend local
+1. Clone the repo and run `cd frontend` along with `npm install` to install all frontend packages.
+2. `npm run build` to build and start the server with `npm run dev`.
 
-Try running some of the following tasks:
+## Steps to clone and run smart contract
+1. Clone the repo and run `npm install` to install all required dependencies
+2. Complie contracts with `npx hardhat compile`
+3. Test contracts with `npx hardhat test`
+4. To depoly contracts and verify(included in script) run `npx hardhat run scripts/deploy.js --network bsctest`
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.js
-```
+Note : Set .env referring example.env
+
+### Screenshot project
+![Treasury DAO](https://github.com/user-attachments/assets/6dd22a61-19af-44b0-b990-5cc29aeae900)
