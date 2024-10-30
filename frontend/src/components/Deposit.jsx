@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import addresses from '../../../addresses.json'; // Adjust the path as necessary
 import USDC from '../../../artifacts/contracts/USDC.sol/USDC.json'; // Adjust the path to your USDC contract ABI
 import Treasury from '../../../artifacts/contracts/Treasury.sol/Treasury.json'; // Adjust the path to your Treasury contract ABI
-import Permit2 from '../../../artifacts/contracts/permit2/Permit2.sol/Permit2.json'; // Adjust the path to your Permit2 contract ABI
+import Permit2 from '../../../artifacts/contracts/permit/Permit2.sol/Permit2.json'; // Adjust the path to your Permit2 contract ABI
 import { SignatureTransfer } from '@uniswap/permit2-sdk'; // Import the SignatureTransfer from Permit2 SDK
 import { constants } from 'ethers';
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card.tsx"; // Import Card components
