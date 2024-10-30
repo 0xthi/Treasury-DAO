@@ -25,8 +25,6 @@ contract Intents is MultiSig, EIP712 {
         uint32 nextExecutionTime; // When the next payment should occur
         uint32 recurringInterval; // Interval for recurring payments
         uint16 executionCount; // Count of how many times the intent has been executed
-        uint16 signatureCount; // Count of collected signatures
-        mapping(address => bool) signatures; // Track signatures for each intent
     }
 
     mapping(uint256 => Intent) public intents;
@@ -50,15 +48,14 @@ contract Intents is MultiSig, EIP712 {
         uint256 intentId = nextIntentId++;
         uint32 nextExecutionTime = uint32(block.timestamp) + _recurringInterval;
 
-        // Create a new Intent struct and set its properties individually
-        Intent storage newIntent = intents[intentId];
-        newIntent.user = msg.sender;
-        newIntent.to = _to;
-        newIntent.amount = _amount;
-        newIntent.nextExecutionTime = nextExecutionTime;
-        newIntent.recurringInterval = _recurringInterval;
-        newIntent.executionCount = 0;
-        newIntent.signatureCount = 0; // Initialize signature count
+        intents[intentId] = Intent({
+            user: msg.sender,
+            to: _to,
+            amount: _amount,
+            nextExecutionTime: nextExecutionTime,
+            recurringInterval: _recurringInterval,
+            executionCount: 0
+        });
 
         emit IntentCreated(intentId, msg.sender, _to, _amount, nextExecutionTime, _recurringInterval);
     }
@@ -90,11 +87,8 @@ contract Intents is MultiSig, EIP712 {
         // Transfer the amount to the intended recipient
         IERC20(address(this)).safeTransfer(intent.to, intent.amount);
 
-        // Effects: Update the execution count
+        // Increment the execution count
         intent.executionCount++;
-
-        // Interaction: Transfer the amount to the intended recipient
-        token.safeTransferFrom(intent.user, address(treasury), intent.amount);
 
         emit IntentExecuted(_intentId, intent.to, intent.amount, intent.executionCount);
 

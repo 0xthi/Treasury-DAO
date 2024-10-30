@@ -3,8 +3,8 @@ pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IIntents.sol";
-import "./permit2/interfaces/IPermit2.sol"; // Import the Permit2 interface
-import "./permit2/interfaces/ISignatureTransfer.sol"; // Import the ISignatureTransfer interface
+import "./permit/interfaces/IPermit2.sol"; // Import the Permit2 interface
+import "./permit/interfaces/ISignatureTransfer.sol"; // Import the ISignatureTransfer interface
 
 contract Treasury {
     IERC20 public immutable token;
