@@ -57,19 +57,19 @@ describe("Custodian Deployment and User Deposit", function () {
 
         // Initialize the Treasury contract with the intents contract address
         await treasury.initialize(await intents.getAddress());
+
+        const mintAmount = ethers.parseUnits("10000", 6); // Assuming USDC has 6 decimals
+        await usdc.connect(custodian).mint(await user.getAddress(), mintAmount); // Mint tokens to user
     });
 
     it("Custodian should mint 10,000 USDC to the user", async () => {
-        const mintAmount = ethers.parseUnits("10000", 6); // Assuming USDC has 6 decimals
-        await usdc.connect(custodian).mint(await user.getAddress(), mintAmount); // Mint tokens to user
+        const mintAmount = ethers.parseUnits("10000", 6);
         const userBalance = await usdc.balanceOf(await user.getAddress());
         expect(userBalance).to.equal(mintAmount);
     });
 
     it("User should deposit to the Treasury using Permit2", async () => {
         const depositAmount = ethers.parseUnits("100", 6); // Amount to deposit
-        const mintAmount = ethers.parseUnits("10000", 6); // Assuming USDC has 6 decimals
-        await usdc.connect(custodian).mint(await user.getAddress(), mintAmount);
 
         // Set infinite approval for the Permit2 contract
         const permit2Address = await permit2.getAddress();
@@ -105,5 +105,64 @@ describe("Custodian Deployment and User Deposit", function () {
         // Check the Treasury balance
         const treasuryBalance = await usdc.balanceOf(treasuryAddress);
         expect(treasuryBalance).to.equal(depositAmount);
+    });
+
+    it("User should create an intent and execute it", async () => {
+        const intentAmount = ethers.parseUnits("50", 6); // Amount for the intent
+        const recipient = await owner1.getAddress(); // Recipient address
+
+        // User creates an intent
+        await intents.connect(user).createIntent(recipient, intentAmount, 86400); // 1 day interval
+
+        // User approves the Intents contract to spend their USDC
+        await usdc.connect(user).approve(intents.address, intentAmount);
+
+        // Simulate signatures for approval
+        const signatures = [];
+        const owners = [owner1, owner2, owner3];
+        for (const owner of owners) {
+            const signature = await owner.signMessage(ethers.utils.arrayify(ethers.utils.keccak256(
+                ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint128"],
+                    [recipient, intentAmount]
+                )
+            )));
+            signatures.push(signature);
+        }
+
+        // Execute the intent with the required signatures
+        await intents.connect(user).approveIntent(0, signatures); // Assuming this is the first intent created
+        await intents.connect(user).executeIntent(0); // Execute the intent
+
+        // Check the recipient's balance
+        const recipientBalance = await usdc.balanceOf(recipient);
+        expect(recipientBalance).to.equal(intentAmount);
+    });
+
+    it("User should not be able to execute intent without allowance", async () => {
+        const intentAmount = ethers.parseUnits("50", 6); // Amount for the intent
+        const recipient = await owner1.getAddress(); // Recipient address
+
+        // User creates an intent
+        await intents.connect(user).createIntent(recipient, intentAmount, 86400); // 1 day interval
+
+        // Simulate signatures for approval
+        const signatures = [];
+        const owners = [owner1, owner2, owner3];
+        for (const owner of owners) {
+            const signature = await owner.signMessage(ethers.utils.arrayify(ethers.utils.keccak256(
+                ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint128"],
+                    [recipient, intentAmount]
+                )
+            )));
+            signatures.push(signature);
+        }
+
+        // User approves the Intents contract to spend their USDC
+        await usdc.connect(user).approve(intents.address, intentAmount);
+
+        // Attempt to execute the intent without the required signatures
+        await expect(intents.connect(user).executeIntent(1)).to.be.revertedWith("Not enough signatures");
     });
 });

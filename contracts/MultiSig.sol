@@ -5,7 +5,6 @@ contract MultiSig {
     address public custodian;
     address[] public owners;
     mapping(address => bool) public isOwnerMapping;
-    mapping(address => uint256) public ownerIndex;
     uint256 public requiredSignatures;
     uint256 public threshold;
 
@@ -40,12 +39,9 @@ contract MultiSig {
         threshold = _threshold;
         custodian = msg.sender;
 
-        unchecked {
-            for (uint256 i = 0; i < _owners.length; i++) {
-                address owner = _owners[i];
-                isOwnerMapping[owner] = true;
-                ownerIndex[owner] = i;
-            }
+        for (uint256 i = 0; i < _owners.length; i++) {
+            address owner = _owners[i];
+            isOwnerMapping[owner] = true;
         }
     }
 
@@ -54,7 +50,6 @@ contract MultiSig {
         
         owners.push(_owner);
         isOwnerMapping[_owner] = true;
-        ownerIndex[_owner] = owners.length - 1;
         
         emit OwnerAdded(_owner);
     }
@@ -62,20 +57,27 @@ contract MultiSig {
     function removeOwner(address _owner) external onlyCustodian {
         if (!isOwnerMapping[_owner]) revert NotAnOwner();
 
-        uint256 index = ownerIndex[_owner];
+        uint256 index = findOwnerIndex(_owner);
         uint256 lastIndex = owners.length - 1;
 
         if (index != lastIndex) {
             address lastOwner = owners[lastIndex];
             owners[index] = lastOwner;
-            ownerIndex[lastOwner] = index;
         }
 
         owners.pop();
         delete isOwnerMapping[_owner];
-        delete ownerIndex[_owner];
 
         emit OwnerRemoved(_owner);
+    }
+
+    function findOwnerIndex(address _owner) internal view returns (uint256) {
+        for (uint256 i = 0; i < owners.length; i++) {
+            if (owners[i] == _owner) {
+                return i;
+            }
+        }
+        revert NotAnOwner(); // If not found, revert
     }
 
     function changeRequiredSignatures(uint256 _newRequiredSignatures) external onlyCustodian {
@@ -91,5 +93,10 @@ contract MultiSig {
 
     function replaceCustodian(address _newCustodian) external onlyCustodian {
         custodian = _newCustodian;
+    }
+
+    // New function to return the entire owners array
+    function getOwners() external view returns (address[] memory) {
+        return owners;
     }
 }

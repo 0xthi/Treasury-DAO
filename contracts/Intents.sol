@@ -17,6 +17,9 @@ contract Intents is MultiSig, EIP712 {
     error AmountMustBeGreaterThanZero();
     error RecurringIntervalMustBeGreaterThanZero();
     error InsufficientSignaturesForAmount();
+    error IntentNotApproved();
+    error IntentAlreadyCancelled();
+    error AlreadySigned(address signer);
 
     struct Intent {
         address user; // User who created the intent
@@ -25,13 +28,17 @@ contract Intents is MultiSig, EIP712 {
         uint32 nextExecutionTime; // When the next payment should occur
         uint32 recurringInterval; // Interval for recurring payments
         uint16 executionCount; // Count of how many times the intent has been executed
+        bool approved; // Whether the intent is approved for execution
+        bool cancelled; // Whether the intent has been cancelled
     }
 
     mapping(uint256 => Intent) public intents;
     uint256 public nextIntentId;
 
     event IntentCreated(uint256 indexed intentId, address indexed user, address indexed to, uint128 amount, uint32 nextExecutionTime, uint32 recurringInterval);
+    event IntentApproved(uint256 indexed intentId);
     event IntentExecuted(uint256 indexed intentId, address indexed to, uint128 amount, uint256 executionCount);
+    event IntentCancelled(uint256 indexed intentId);
 
     // Define the EIP712 domain name and version
     string private constant DOMAIN_NAME = "IntentsContract";
@@ -54,18 +61,17 @@ contract Intents is MultiSig, EIP712 {
             amount: _amount,
             nextExecutionTime: nextExecutionTime,
             recurringInterval: _recurringInterval,
-            executionCount: 0
+            executionCount: 0,
+            approved: false,
+            cancelled: false
         });
 
         emit IntentCreated(intentId, msg.sender, _to, _amount, nextExecutionTime, _recurringInterval);
     }
 
-    function executeApprovedIntent(
-        uint256 _intentId,
-        bytes[] calldata _signatures // Collect signatures from owners
-    ) external {
+    function approveIntent(uint256 _intentId, bytes[] calldata _signatures) external {
         Intent storage intent = intents[_intentId];
-        if (intent.nextExecutionTime > block.timestamp) revert ExecutionTimeNotReached();
+        if (intent.approved || intent.cancelled) revert IntentAlreadyCancelled();
 
         // Determine required signatures based on the amount
         uint256 required = intent.amount > threshold ? requiredSignatures : 1;
@@ -73,16 +79,38 @@ contract Intents is MultiSig, EIP712 {
         // Verify signatures
         if (_signatures.length < required) revert NotEnoughSignatures();
 
-        // Check if the signatures are valid
         uint256 validSignatures = 0;
+        address[] memory signers = new address[](_signatures.length); // Local array to track signers
+
         for (uint256 i = 0; i < _signatures.length; i++) {
             address signer = recoverSigner(intent.to, intent.amount, _signatures[i]);
             if (isOwnerMapping[signer]) {
+                // Check for duplicates
+                bool alreadySigned = false;
+                for (uint256 j = 0; j < validSignatures; j++) {
+                    if (signers[j] == signer) {
+                        alreadySigned = true;
+                        break;
+                    }
+                }
+                if (alreadySigned) {
+                    revert AlreadySigned(signer); // Revert if the signer has already signed
+                }
+                signers[validSignatures] = signer; // Store the signer
                 validSignatures++;
             }
-        }
+        }   
 
         if (validSignatures < required) revert InsufficientSignaturesForAmount();
+
+        intent.approved = true;
+        emit IntentApproved(_intentId);
+    }
+
+    function executeIntent(uint256 _intentId) external {
+        Intent storage intent = intents[_intentId];
+        if (!intent.approved || intent.cancelled) revert IntentNotApproved();
+        if (intent.nextExecutionTime > block.timestamp) revert ExecutionTimeNotReached();
 
         // Transfer the amount to the intended recipient
         IERC20(address(this)).safeTransfer(intent.to, intent.amount);
@@ -94,6 +122,44 @@ contract Intents is MultiSig, EIP712 {
 
         // Update the next execution time for the intent
         intent.nextExecutionTime += intent.recurringInterval; // Set the next execution time
+    }
+
+    function cancelIntent(uint256 _intentId, bytes[] calldata _signatures) external {
+        Intent storage intent = intents[_intentId];
+        if (intent.cancelled) revert IntentAlreadyCancelled();
+
+        // Determine required signatures based on the amount
+        uint256 required = intent.amount > threshold ? requiredSignatures : 1;
+
+        // Verify signatures
+        if (_signatures.length < required) revert NotEnoughSignatures();
+
+        uint256 validSignatures = 0;
+        address[] memory signers = new address[](_signatures.length); // Local array to track signers
+
+        for (uint256 i = 0; i < _signatures.length; i++) {
+            address signer = recoverSigner(intent.to, intent.amount, _signatures[i]);
+            if (isOwnerMapping[signer]) {
+                // Check for duplicates
+                bool alreadySigned = false;
+                for (uint256 j = 0; j < validSignatures; j++) {
+                    if (signers[j] == signer) {
+                        alreadySigned = true;
+                        break;
+                    }
+                }
+                if (alreadySigned) {
+                    revert AlreadySigned(signer); // Revert if the signer has already signed
+                }
+                signers[validSignatures] = signer; // Store the signer
+                validSignatures++;
+            }
+        }   
+
+        if (validSignatures < required) revert InsufficientSignaturesForAmount();
+
+        intent.cancelled = true;
+        emit IntentCancelled(_intentId);
     }
 
     function recoverSigner(address to, uint128 amount, bytes memory signature) internal view returns (address) {

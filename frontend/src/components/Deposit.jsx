@@ -6,14 +6,14 @@ import Treasury from '../../../artifacts/contracts/Treasury.sol/Treasury.json'; 
 import Permit2 from '../../../artifacts/contracts/permit/Permit2.sol/Permit2.json'; // Adjust the path to your Permit2 contract ABI
 import { SignatureTransfer } from '@uniswap/permit2-sdk'; // Import the SignatureTransfer from Permit2 SDK
 import { constants } from 'ethers';
-import { Card, CardHeader, CardTitle, CardContent } from "./ui/card.tsx"; // Import Card components
-import { Button } from "./ui/button.tsx"; // Import Button from Shadcn UI
-import { useToast } from "../hooks/use-toast.ts"; // Import useToast
+import { Card, CardContent, CardHeader, TextField, Button, Snackbar, Alert, Chip } from '@mui/material';
 
 const DepositComponent = () => {
     const [amount, setAmount] = useState('');
     const [error, setError] = useState('');
-    const { toast } = useToast(); // Initialize toast
+    const [transactionHash, setTransactionHash] = useState('');
+    const [openSnackbar, setOpenSnackbar] = useState(false);
+    const [chainId, setChainId] = useState(null); // State for chainId
 
     const handleDeposit = async () => {
         if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
@@ -28,7 +28,8 @@ const DepositComponent = () => {
             const account = await signer.getAddress();
 
             // Get the connected chain ID
-            const chainId = await provider.getNetwork().then(network => network.chainId);
+            const network = await provider.getNetwork();
+            setChainId(network.chainId); // Set the chainId in state
 
             // Get contract addresses from addresses.json
             const usdcAddress = addresses.USDC;
@@ -62,7 +63,7 @@ const DepositComponent = () => {
                 deadline: Math.floor(Date.now() / 1000) + 86400
             };
 
-            const { domain, types, values } = SignatureTransfer.getPermitData(permit, permit2Address, chainId);
+            const { domain, types, values } = SignatureTransfer.getPermitData(permit, permit2Address, network.chainId);
             const signature = await signer._signTypedData(domain, types, values);
 
             // Call the deposit function in the Treasury contract
@@ -70,14 +71,13 @@ const DepositComponent = () => {
             const receipt = await depositTx.wait();
 
             console.log("Transaction Hash:", receipt.transactionHash);
-            toast({ title: "Transaction Successful", description: `Transaction Hash: ${receipt.transactionHash}`, status: "success" });
-
+            setTransactionHash(receipt.transactionHash); // Set the transaction hash for notification
+            setOpenSnackbar(true); // Open the snackbar notification
             setAmount('');
             setError('');
         } catch (err) {
             console.error(err);
             setError('Transaction failed. Please try again.');
-            toast({ title: "Transaction Failed", description: "Please try again.", status: "error" });
         }
     };
 
@@ -99,23 +99,66 @@ const DepositComponent = () => {
         throw new Error("All nonces are used.");
     };
 
+    const handleCloseSnackbar = () => {
+        setOpenSnackbar(false);
+    };
+
+    const getEtherscanUrl = (chainId) => {
+        switch (chainId) {
+            case 1: // Mainnet
+                return 'https://etherscan.io/tx/';
+            case 11155111: // Sepolia
+                return 'https://sepolia.etherscan.io/tx/';
+            case 42161: // Arbitrum
+                return 'https://arbiscan.io/tx/';
+            case 421613: // Arbitrum Sepolia
+                return 'https://testnet.arbiscan.io/tx/';
+            case 56: // Binance Smart Chain (BSC)
+                return 'https://bscscan.com/tx/';
+            case 97: // Binance Smart Chain Testnet
+                return 'https://testnet.bscscan.com/tx/';
+            default:
+                return 'https://etherscan.io/tx/'; // Fallback to Mainnet
+        }
+    };
+
     return (
-        <Card className="p-4">
-            <CardHeader>
-                <CardTitle>Deposit USDC to Treasury</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Enter amount in USDC"
-                    className="border rounded-md p-2 mb-2 w-full"
-                />
-                <Button onClick={handleDeposit} className="w-full">Deposit</Button>
-                {error && <p className="text-red-500">{error}</p>}
-            </CardContent>
-        </Card>
+        <div className="p-4">
+            <Card>
+                <CardHeader title="Deposit USDC to Treasury" style={{ textAlign: 'center' }} />
+                <CardContent style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <TextField
+                        type="number"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder="Enter amount in USDC"
+                        fullWidth
+                        margin="normal"
+                        variant="outlined"
+                        size="small" // Reduce size of input
+                        sx={{ maxWidth: '200px' }} // Set max width for input
+                    />
+                    <Button onClick={handleDeposit} variant="contained" color="primary" fullWidth size="small" sx={{ maxWidth: '200px', marginTop: 1 }}>
+                        Deposit
+                    </Button>
+                    {error && <p className="text-red-500">{error}</p>}
+                </CardContent>
+            </Card>
+            <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={handleCloseSnackbar}>
+                <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
+                    Transaction Successful! Hash: 
+                    <Chip 
+                        label={transactionHash} 
+                        component="a" 
+                        href={`${getEtherscanUrl(chainId)}${transactionHash}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        clickable 
+                        sx={{ marginLeft: 1 }} 
+                    />
+                </Alert>
+            </Snackbar>
+        </div>
     );
 };
 
