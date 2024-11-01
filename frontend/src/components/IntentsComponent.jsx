@@ -158,7 +158,7 @@ const IntentsComponent = () => {
         try {
             const intent = intents.find(intent => intent.id === intentId);
             const signaturesArray = signatures[intentId] || []; // Collect signatures from storage
-            const tx = await intentsContract.executeApprovedIntent(intentId, signaturesArray);
+            const tx = await intentsContract.approveIntent(intentId, signaturesArray);
             await tx.wait();
             alert('Intent execution transaction sent!');
         } catch (error) {
