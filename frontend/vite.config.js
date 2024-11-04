@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      '@uniswap/permit2-sdk': require.resolve('@uniswap/permit2-sdk'),
     },
   },
   build: {
