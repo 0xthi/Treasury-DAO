@@ -56,6 +56,7 @@ const DepositComponent = () => {
             const permit = {
                 permitted: {
                     token: usdcAddress,
+
                     amount: depositAmount,
                 },
                 spender: treasuryAddress,

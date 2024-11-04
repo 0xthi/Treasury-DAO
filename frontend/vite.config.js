@@ -15,4 +15,7 @@ export default defineConfig({
       external: ['@uniswap/permit2-sdk'],
     },
   },
+  optimizeDeps: {
+    include: ['@uniswap/permit2-sdk'],
+  },
 });
