@@ -154,7 +154,7 @@ const IntentsComponent = () => {
         }
     };
 
-    const handleExecuteIntent = async (intentId) => {
+    const handleApproveIntent = async (intentId) => {
         try {
             const intent = intents.find(intent => intent.id === intentId);
             const signaturesArray = signatures[intentId] || []; // Collect signatures from storage
@@ -232,7 +232,7 @@ const IntentsComponent = () => {
                                 </TableCell>
                                 <TableCell>
                                     <Button onClick={() => handleSignIntent(intent.id)} disabled={intent.signatures >= intent.requiredSignatures}>Sign</Button>
-                                    <Button onClick={() => handleExecuteIntent(intent.id)} disabled={intent.signatures < intent.requiredSignatures}>Execute</Button>
+                                    <Button onClick={() => handleApproveIntent(intent.id)} disabled={intent.signatures < intent.requiredSignatures}>Execute</Button>
                                 </TableCell>
                             </TableRow>
                         ))}
